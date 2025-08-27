@@ -18,14 +18,14 @@ import java.util.regex.Pattern;
 public class RuleEngine {
     
     private static final Logger logger = LoggerFactory.getLogger(RuleEngine.class);
-    private final MvelEvaluator mvelEvaluator;
+    private final SpelEvaluator spelEvaluator;
     private final ExternalCallService externalCallService;
     private final ObjectMapper objectMapper;
     
-    public RuleEngine(MvelEvaluator mvelEvaluator, 
+    public RuleEngine(SpelEvaluator spelEvaluator, 
                      ExternalCallService externalCallService, 
                      ObjectMapper objectMapper) {
-        this.mvelEvaluator = mvelEvaluator;
+        this.spelEvaluator = spelEvaluator;
         this.externalCallService = externalCallService;
         this.objectMapper = objectMapper;
     }
@@ -55,8 +55,8 @@ public class RuleEngine {
                 try {
                     // Check when condition
                     if (rule.getWhen() != null && !rule.getWhen().trim().isEmpty()) {
-                        Map<String, Object> context = mvelEvaluator.createContext(payload, ctx, defaults, env);
-                        boolean whenCondition = mvelEvaluator.evaluateBoolean(rule.getWhen(), context);
+                        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
+                        boolean whenCondition = spelEvaluator.evaluateBoolean(rule.getWhen(), context);
                         if (!whenCondition) {
                             ruleTrace.put("status", "SKIPPED");
                             ruleTrace.put("reason", "when condition not met");
@@ -83,10 +83,10 @@ public class RuleEngine {
                     
                     // Transform
                     if (rule.getTransform() != null && !rule.getTransform().isEmpty()) {
-                        Map<String, Object> context = mvelEvaluator.createContext(payload, ctx, defaults, env);
+                        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
                         for (TransformStep step : rule.getTransform()) {
-                            if ("MVEL".equals(step.getKind())) {
-                                mvelEvaluator.evaluate(step.getMvel(), context);
+                            if ("SPEL".equalsIgnoreCase(step.getKind())) {
+                                spelEvaluator.evaluate(step.getSpel(), context);
                             }
                         }
                         ruleTrace.put("status", "TRANSFORMED");
@@ -94,24 +94,36 @@ public class RuleEngine {
                     
                     // External call
                     if (rule.getExternalCall() != null) {
-                        Map<String, Object> context = mvelEvaluator.createContext(payload, ctx, defaults, env);
-                        Object result = externalCallService.invoke(rule.getExternalCall(), context);
+                        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
+                        Object result = null;
+                        String errorMessage = null;
+                        try {
+                            result = externalCallService.invoke(rule.getExternalCall(), context);
+                        } catch (Exception e) {
+                            logger.warn("External call failed for rule {}: {}", rule.getId(), e.getMessage());
+                            result = null;
+                            errorMessage = e.getMessage();
+                        }
                         
-                        // Save result to context
+                        // Save result to context for internal use in transformations
                         if (rule.getExternalCall().getSaveAs() != null) {
                             ctx.put(rule.getExternalCall().getSaveAs(), result);
                         }
                         
-                        // Record external call
+                        // Record external call metadata (without the actual response data)
                         Map<String, Object> externalCall = new HashMap<>();
                         externalCall.put("ruleId", rule.getId());
                         externalCall.put("url", rule.getExternalCall().getUrl());
                         externalCall.put("method", rule.getExternalCall().getMethod());
                         externalCall.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
-                        externalCall.put("result", sanitizeResult(result, config.getRedactHeaders()));
+                        externalCall.put("status", result != null ? "SUCCESS" : "FAILED");
+                        if (errorMessage != null) {
+                            externalCall.put("error", errorMessage);
+                        }
+                        // Note: We don't include the actual result data to avoid exposing external API responses
                         externalCalls.add(externalCall);
                         
-                        ruleTrace.put("status", "EXTERNAL_CALL");
+                        ruleTrace.put("status", result != null ? "EXTERNAL_CALL" : "EXTERNAL_CALL_FAILED");
                         ruleTrace.put("externalCall", externalCall);
                     }
                     
@@ -151,14 +163,14 @@ public class RuleEngine {
                                 Map<String, Object> ctx, Map<String, Object> defaults, 
                                 Map<String, String> env) {
         List<String> errors = new ArrayList<>();
-        Map<String, Object> context = mvelEvaluator.createContext(payload, ctx, defaults, env);
+        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
         
         for (ValidationRule validation : validationRules) {
             try {
                 Object value = getValueByPath(payload, validation.getPath());
                 
-                // Required check
-                if (Boolean.TRUE.equals(validation.getRequired()) && value == null) {
+                // Required check - check for null, empty string, or blank string
+                if (Boolean.TRUE.equals(validation.getRequired()) && isBlank(value)) {
                     errors.add(validation.getMessage());
                     continue;
                 }
@@ -183,9 +195,9 @@ public class RuleEngine {
                     }
                 }
                 
-                // MVEL check
-                if (validation.getMvel() != null) {
-                    if (!mvelEvaluator.evaluateBoolean(validation.getMvel(), context)) {
+                // SpEL check
+                if (validation.getSpel() != null) {
+                    if (!spelEvaluator.evaluateBoolean(validation.getSpel(), context)) {
                         errors.add(validation.getMessage());
                     }
                 }
@@ -199,7 +211,7 @@ public class RuleEngine {
         return errors;
     }
     
-    private Object getValueByPath(Map<String, Object> payload, String path) {
+    public Object getValueByPath(Map<String, Object> payload, String path) {
         if (path == null || path.trim().isEmpty()) {
             return payload;
         }
@@ -213,7 +225,15 @@ public class RuleEngine {
         return payload;
     }
     
-    private boolean isValidType(Object value, String expectedType) {
+    /**
+     * Checks if a value is of the expected type.
+     * Note: Empty strings are considered valid strings (use required validation for non-empty checks).
+     */
+    public boolean isValidType(Object value, String expectedType) {
+        if (value == null) {
+            return false; // null is not valid for any type
+        }
+        
         switch (expectedType.toLowerCase()) {
             case "string":
                 return value instanceof String;
@@ -229,7 +249,21 @@ public class RuleEngine {
                 return true; // Unknown type, assume valid
         }
     }
+
+    private boolean isBlank(Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (value instanceof String) {
+            return ((String) value).trim().isEmpty();
+        }
+        return false;
+    }
     
+    /**
+     * Sanitizes sensitive data from results.
+     * Note: External call results are not included in responses to avoid exposing external API data.
+     */
     private Object sanitizeResult(Object result, List<String> redactHeaders) {
         if (result == null) {
             return null;

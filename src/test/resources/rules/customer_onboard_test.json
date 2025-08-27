@@ -1,0 +1,77 @@
+{
+  "type": "customer_onboard",
+  "redactHeaders": ["Authorization", "X-API-KEY", "apiKey", "token"],
+  "defaults": {
+    "country": "IN",
+    "riskThreshold": 70
+  },
+  "rules": [
+    {
+      "id": "v1-requireds",
+      "description": "Basic required fields",
+      "stopOnValidationError": true,
+      "validate": [
+        { "path": "$.firstName", "required": true, "type": "string", "message": "firstName is required" },
+        { "path": "$.lastName",  "required": true, "type": "string", "message": "lastName is required" },
+        { "path": "$.email",     "required": true, "type": "string", "regex": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", "message": "email invalid" },
+        { "path": "$.age",       "required": true, "type": "number", "spel": "#payload['age'] >= 18", "message": "must be 18+" }
+      ],
+      "onSuccess": { "action": "CONTINUE" },
+      "onFailure": { "action": "STOP" }
+    },
+    {
+      "id": "t1-normalize-names",
+      "description": "Trim names and build fullName",
+      "transform": [
+        { "kind": "SPEL", "spel": "#payload['firstName'] = #payload['firstName']?.trim()" },
+        { "kind": "SPEL", "spel": "#payload['lastName']  = #payload['lastName']?.trim()" },
+        { "kind": "SPEL", "spel": "#ctx['fullName'] = (#payload['firstName'] != null ? #payload['firstName'] : '') + ' ' + (#payload['lastName'] != null ? #payload['lastName'] : '')" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t2-derive-risk-base",
+      "description": "Compute base risk",
+      "transform": [
+        { "kind": "SPEL", "spel": "#ctx['country'] = ((#payload['country'] != null) ? #payload['country'] : #defaults['country'])" },
+        { "kind": "SPEL", "spel": "#ctx['baseRisk'] = (#payload['age'] < 25 ? 20 : (#payload['age'] < 40 ? 10 : 5))" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t3-conditional-risk-adjust",
+      "description": "Adjust risk for corporate domains",
+      "when": "(#payload['email'] != null and (#payload['email']).endsWith('.corp')) or (#payload['email'] != null and (#payload['email']).endsWith('.biz'))",
+      "transform": [
+        { "kind": "SPEL", "spel": "#ctx['baseRisk'] = ((#ctx['baseRisk']?:0) - 5)" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t4-merge-intermediate",
+      "description": "Merge ctx values into payload",
+      "transform": [
+        { "kind": "SPEL", "spel": "#payload['fullName'] = (#ctx['fullName'] != null ? #ctx['fullName'] : '')" },
+        { "kind": "SPEL", "spel": "#payload['riskScore'] = (#ctx['baseRisk'] != null ? #ctx['baseRisk'] : 0)" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t5-mock-i18n-message",
+      "description": "Add mock I18N messages for testing",
+      "transform": [
+        { "kind": "SPEL", "spel": "#payload['messages'] = new java.util.HashMap()" },
+        { "kind": "SPEL", "spel": "#payload['messages']['allocateApproversMessage'] = 'Test Allocation Message'" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "end-finalize",
+      "description": "Finalize payload",
+      "transform": [
+        { "kind": "SPEL", "spel": "#payload['processedAt'] = #now.toString()" }
+      ],
+      "onSuccess": { "action": "STOP" }
+    }
+  ]
+}

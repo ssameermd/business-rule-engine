@@ -14,7 +14,7 @@
         { "path": "$.firstName", "required": true, "type": "string", "message": "firstName is required" },
         { "path": "$.lastName",  "required": true, "type": "string", "message": "lastName is required" },
         { "path": "$.email",     "required": true, "type": "string", "regex": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", "message": "email invalid" },
-        { "path": "$.age",       "required": true, "type": "number", "mvel": "payload.age >= 18", "message": "must be 18+" }
+        { "path": "$.age",       "required": true, "type": "number", "spel": "#payload['age'] >= 18", "message": "must be 18+" }
       ],
       "onSuccess": { "action": "CONTINUE" },
       "onFailure": { "action": "STOP" }
@@ -23,9 +23,9 @@
       "id": "t1-normalize-names",
       "description": "Trim names and build fullName",
       "transform": [
-        { "kind": "MVEL", "mvel": "payload.firstName = payload.firstName.trim();" },
-        { "kind": "MVEL", "mvel": "payload.lastName  = payload.lastName.trim();" },
-        { "kind": "MVEL", "mvel": "ctx.fullName = payload.firstName + ' ' + payload.lastName;" }
+        { "kind": "SPEL", "spel": "#payload['firstName'] = #payload['firstName']?.trim()" },
+        { "kind": "SPEL", "spel": "#payload['lastName']  = #payload['lastName']?.trim()" },
+        { "kind": "SPEL", "spel": "#ctx['fullName'] = (#payload['firstName'] != null ? #payload['firstName'] : '') + ' ' + (#payload['lastName'] != null ? #payload['lastName'] : '')" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
@@ -33,17 +33,17 @@
       "id": "t2-derive-risk-base",
       "description": "Compute base risk",
       "transform": [
-        { "kind": "MVEL", "mvel": "ctx.country = payload.country != null ? payload.country : defaults.country;" },
-        { "kind": "MVEL", "mvel": "ctx.baseRisk = (payload.age < 25 ? 20 : (payload.age < 40 ? 10 : 5));" }
+        { "kind": "SPEL", "spel": "#ctx['country'] = ((#payload['country'] != null) ? #payload['country'] : #defaults['country'])" },
+        { "kind": "SPEL", "spel": "#ctx['baseRisk'] = (#payload['age'] < 25 ? 20 : (#payload['age'] < 40 ? 10 : 5))" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
     {
       "id": "t3-conditional-risk-adjust",
       "description": "Adjust risk for corporate domains",
-      "when": "payload.email.endsWith('.corp') || payload.email.endsWith('.biz')",
+      "when": "(#payload['email'] != null and (#payload['email']).endsWith('.corp')) or (#payload['email'] != null and (#payload['email']).endsWith('.biz'))",
       "transform": [
-        { "kind": "MVEL", "mvel": "ctx.baseRisk = ctx.baseRisk - 5;" }
+        { "kind": "SPEL", "spel": "#ctx['baseRisk'] = ((#ctx['baseRisk']?:0) - 5)" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
@@ -51,27 +51,8 @@
       "id": "t4-merge-intermediate",
       "description": "Merge ctx values into payload",
       "transform": [
-        { "kind": "MVEL", "mvel": "payload.fullName = ctx.fullName;" },
-        { "kind": "MVEL", "mvel": "payload.riskScore = ctx.baseRisk;" }
-      ],
-      "onSuccess": { "action": "CONTINUE" }
-    },
-    {
-      "id": "x1-kyc-check",
-      "description": "Call external KYC API",
-      "when": "payload.riskScore >= defaults.riskThreshold",
-      "externalCall": {
-        "method": "POST",
-        "url": "https://example-kyc.local/kyc/check",
-        "headers": {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer {{mvel: env['KYC_TOKEN']}}"
-        },
-        "bodyTemplate": "{ \"name\": \"{{mvel: payload.fullName}}\", \"email\": \"{{mvel: payload.email}}\", \"country\": \"{{mvel: ctx.country}}\" }",
-        "saveAs": "kycResult"
-      },
-      "transform": [
-        { "kind": "MVEL", "mvel": "payload.kyc = ctx.kycResult;" }
+        { "kind": "SPEL", "spel": "#payload['fullName'] = (#ctx['fullName'] != null ? #ctx['fullName'] : '')" },
+        { "kind": "SPEL", "spel": "#payload['riskScore'] = (#ctx['baseRisk'] != null ? #ctx['baseRisk'] : 0)" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
@@ -84,8 +65,8 @@
         "saveAs": "i18nResult"
       },
       "transform": [
-        { "kind": "MVEL", "mvel": "payload.messages = new java.util.HashMap();" },
-        { "kind": "MVEL", "mvel": "payload.messages.allocateApproversMessage = ctx.i18nResult.ALLOCATION.AllocatetheApprovers;" }
+        { "kind": "SPEL", "spel": "#payload['messages'] = new java.util.HashMap()" },
+        { "kind": "SPEL", "spel": "#payload['messages']['allocateApproversMessage'] = (#ctx['i18nResult'] != null ? #ctx['i18nResult']['ALLOCATION']['AllocatetheApprovers'] : 'Default Allocation Message')" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
@@ -93,7 +74,7 @@
       "id": "end-finalize",
       "description": "Finalize payload",
       "transform": [
-        { "kind": "MVEL", "mvel": "payload.processedAt = now.toString();" }
+        { "kind": "SPEL", "spel": "#payload['processedAt'] = #now.toString()" }
       ],
       "onSuccess": { "action": "STOP" }
     }

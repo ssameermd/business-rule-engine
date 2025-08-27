@@ -16,8 +16,8 @@ public class ValidationRule {
     @JsonProperty("regex")
     private String regex;
     
-    @JsonProperty("mvel")
-    private String mvel;
+    @JsonProperty("spel")
+    private String spel;
     
     @JsonProperty("message")
     private String message;
@@ -27,12 +27,12 @@ public class ValidationRule {
     
     // Constructor with parameters
     public ValidationRule(String path, Boolean required, String type, 
-                         String regex, String mvel, String message) {
+                         String regex, String spel, String message) {
         this.path = path;
         this.required = required;
         this.type = type;
         this.regex = regex;
-        this.mvel = mvel;
+        this.spel = spel;
         this.message = message;
     }
     
@@ -69,13 +69,8 @@ public class ValidationRule {
         this.regex = regex;
     }
     
-    public String getMvel() {
-        return mvel;
-    }
-    
-    public void setMvel(String mvel) {
-        this.mvel = mvel;
-    }
+    public String getSpel() { return spel; }
+    public void setSpel(String spel) { this.spel = spel; }
     
     public String getMessage() {
         return message;
@@ -92,7 +87,7 @@ public class ValidationRule {
                 ", required=" + required +
                 ", type='" + type + '\'' +
                 ", regex='" + regex + '\'' +
-                ", mvel='" + mvel + '\'' +
+                ", spel='" + spel + '\'' +
                 ", message='" + message + '\'' +
                 '}';
     }

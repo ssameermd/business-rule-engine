@@ -1,0 +1,24 @@
+[
+  {
+    "httpRequest": {
+      "method": "GET",
+      "path": "/XpertappR3/app/apservice/i18n/getlanguage"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "ALLOCATION": {
+          "AllocatetheApprovers": "Please allocate the approvers for this request",
+          "ApprovalRequired": "Approval is required for this transaction"
+        },
+        "COMMON": {
+          "Success": "Operation completed successfully",
+          "Error": "An error occurred during processing"
+        }
+      }
+    }
+  }
+]

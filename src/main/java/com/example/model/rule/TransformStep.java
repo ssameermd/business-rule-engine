@@ -7,16 +7,16 @@ public class TransformStep {
     @JsonProperty("kind")
     private String kind;
     
-    @JsonProperty("mvel")
-    private String mvel;
+    @JsonProperty("spel")
+    private String spel;
     
     // Default constructor
     public TransformStep() {}
     
     // Constructor with parameters
-    public TransformStep(String kind, String mvel) {
+    public TransformStep(String kind, String spel) {
         this.kind = kind;
-        this.mvel = mvel;
+        this.spel = spel;
     }
     
     // Getters and Setters
@@ -28,19 +28,14 @@ public class TransformStep {
         this.kind = kind;
     }
     
-    public String getMvel() {
-        return mvel;
-    }
-    
-    public void setMvel(String mvel) {
-        this.mvel = mvel;
-    }
+    public String getSpel() { return spel; }
+    public void setSpel(String spel) { this.spel = spel; }
     
     @Override
     public String toString() {
         return "TransformStep{" +
                 "kind='" + kind + '\'' +
-                ", mvel='" + mvel + '\'' +
+                ", spel='" + spel + '\'' +
                 '}';
     }
 }

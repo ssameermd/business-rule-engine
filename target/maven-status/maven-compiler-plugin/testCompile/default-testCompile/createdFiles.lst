@@ -1,1 +1,5 @@
+com\example\controller\RulesControllerTest.class
+com\example\service\ExternalCallServiceTest.class
 com\example\BusinessRuleEngineApplicationTests.class
+com\example\service\RuleEngineTest.class
+com\example\service\SpelEvaluatorTest.class

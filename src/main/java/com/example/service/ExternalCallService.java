@@ -4,9 +4,9 @@ import com.example.model.rule.ExternalCall;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
 
 import java.util.Map;
 
@@ -14,15 +14,15 @@ import java.util.Map;
 public class ExternalCallService {
     
     private static final Logger logger = LoggerFactory.getLogger(ExternalCallService.class);
-    private final RestTemplateBuilder restTemplateBuilder;
-    private final MvelEvaluator mvelEvaluator;
+    private final RestTemplate restTemplate;
+    private final SpelEvaluator spelEvaluator;
     private final ObjectMapper objectMapper;
     
-    public ExternalCallService(RestTemplateBuilder restTemplateBuilder, 
-                             MvelEvaluator mvelEvaluator, 
+    public ExternalCallService(RestTemplate restTemplate, 
+                             SpelEvaluator spelEvaluator, 
                              ObjectMapper objectMapper) {
-        this.restTemplateBuilder = restTemplateBuilder;
-        this.mvelEvaluator = mvelEvaluator;
+        this.restTemplate = restTemplate;
+        this.spelEvaluator = spelEvaluator;
         this.objectMapper = objectMapper;
     }
     
@@ -31,8 +31,8 @@ public class ExternalCallService {
             String method = call.getMethod();
             String url = call.getUrl();
             
-            // Process URL template if it contains MVEL expressions
-            url = mvelEvaluator.processTemplate(url, context);
+            // Process URL template if it contains SpEL expressions
+            url = spelEvaluator.processTemplate(url, context);
             
             if ("GET".equalsIgnoreCase(method)) {
                 return handleGet(url, call, context);
@@ -49,33 +49,29 @@ public class ExternalCallService {
     }
     
     private Object handleGet(String url, ExternalCall call, Map<String, Object> context) {
-        var restTemplate = restTemplateBuilder.build();
-        
-        // Process headers if they contain MVEL expressions
+        // Process headers if they contain SpEL expressions
         HttpHeaders headers = new HttpHeaders();
         if (call.getHeaders() != null) {
             for (Map.Entry<String, String> header : call.getHeaders().entrySet()) {
-                String headerValue = mvelEvaluator.processTemplate(header.getValue(), context);
+                String headerValue = spelEvaluator.processTemplate(header.getValue(), context);
                 headers.set(header.getKey(), headerValue);
             }
         }
         
         HttpEntity<String> request = new HttpEntity<>(headers);
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.GET, request, Map.class);
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(url, HttpMethod.GET, request, (Class<Map<String, Object>>)(Class<?>)Map.class);
         
         logger.info("GET call to {} returned status: {}", url, response.getStatusCode());
         return response.getBody();
     }
     
     private Object handlePost(String url, ExternalCall call, Map<String, Object> context) {
-        var restTemplate = restTemplateBuilder.build();
-        
         // Process headers
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         if (call.getHeaders() != null) {
             for (Map.Entry<String, String> header : call.getHeaders().entrySet()) {
-                String headerValue = mvelEvaluator.processTemplate(header.getValue(), context);
+                String headerValue = spelEvaluator.processTemplate(header.getValue(), context);
                 headers.set(header.getKey(), headerValue);
             }
         }
@@ -83,11 +79,11 @@ public class ExternalCallService {
         // Process body template
         String body = call.getBodyTemplate();
         if (body != null) {
-            body = mvelEvaluator.processTemplate(body, context);
+            body = spelEvaluator.processTemplate(body, context);
         }
         
         HttpEntity<String> request = new HttpEntity<>(body, headers);
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+        ResponseEntity<Map<String, Object>> response = restTemplate.exchange(url, HttpMethod.POST, request, (Class<Map<String, Object>>)(Class<?>)Map.class);
         
         logger.info("POST call to {} returned status: {}", url, response.getStatusCode());
         return response.getBody();

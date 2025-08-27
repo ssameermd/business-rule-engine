@@ -1,0 +1,20 @@
+[
+  {
+    "httpRequest": {
+      "method": "POST",
+      "path": "/kyc/check"
+    },
+    "httpResponse": {
+      "statusCode": 200,
+      "headers": {
+        "Content-Type": ["application/json"]
+      },
+      "body": {
+        "status": "APPROVED",
+        "score": 85,
+        "riskLevel": "LOW",
+        "timestamp": "2024-01-01T12:00:00Z"
+      }
+    }
+  }
+]
