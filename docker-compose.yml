@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  business-rule-engine:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - KYC_TOKEN=demo-token
+      - JAVA_OPTS=-Xmx512m -Xms256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - rule-engine-network
+
+  # Mock external services for testing
+  mock-kyc:
+    image: mockserver/mockserver:latest
+    ports:
+      - "8081:1080"
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/mock-kyc.json
+    volumes:
+      - ./mock-config:/config
+    networks:
+      - rule-engine-network
+
+  mock-i18n:
+    image: mockserver/mockserver:latest
+    ports:
+      - "8082:1080"
+    environment:
+      MOCKSERVER_INITIALIZATION_JSON_PATH: /config/mock-i18n.json
+    volumes:
+      - ./mock-config:/config
+    networks:
+      - rule-engine-network
+
+networks:
+  rule-engine-network:
+    driver: bridge

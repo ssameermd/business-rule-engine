@@ -1,0 +1,101 @@
+{
+  "type": "customer_onboard",
+  "redactHeaders": ["Authorization", "X-API-KEY", "apiKey", "token"],
+  "defaults": {
+    "country": "IN",
+    "riskThreshold": 70
+  },
+  "rules": [
+    {
+      "id": "v1-requireds",
+      "description": "Basic required fields",
+      "stopOnValidationError": true,
+      "validate": [
+        { "path": "$.firstName", "required": true, "type": "string", "message": "firstName is required" },
+        { "path": "$.lastName",  "required": true, "type": "string", "message": "lastName is required" },
+        { "path": "$.email",     "required": true, "type": "string", "regex": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", "message": "email invalid" },
+        { "path": "$.age",       "required": true, "type": "number", "mvel": "payload.age >= 18", "message": "must be 18+" }
+      ],
+      "onSuccess": { "action": "CONTINUE" },
+      "onFailure": { "action": "STOP" }
+    },
+    {
+      "id": "t1-normalize-names",
+      "description": "Trim names and build fullName",
+      "transform": [
+        { "kind": "MVEL", "mvel": "payload.firstName = payload.firstName.trim();" },
+        { "kind": "MVEL", "mvel": "payload.lastName  = payload.lastName.trim();" },
+        { "kind": "MVEL", "mvel": "ctx.fullName = payload.firstName + ' ' + payload.lastName;" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t2-derive-risk-base",
+      "description": "Compute base risk",
+      "transform": [
+        { "kind": "MVEL", "mvel": "ctx.country = payload.country != null ? payload.country : defaults.country;" },
+        { "kind": "MVEL", "mvel": "ctx.baseRisk = (payload.age < 25 ? 20 : (payload.age < 40 ? 10 : 5));" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t3-conditional-risk-adjust",
+      "description": "Adjust risk for corporate domains",
+      "when": "payload.email.endsWith('.corp') || payload.email.endsWith('.biz')",
+      "transform": [
+        { "kind": "MVEL", "mvel": "ctx.baseRisk = ctx.baseRisk - 5;" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "t4-merge-intermediate",
+      "description": "Merge ctx values into payload",
+      "transform": [
+        { "kind": "MVEL", "mvel": "payload.fullName = ctx.fullName;" },
+        { "kind": "MVEL", "mvel": "payload.riskScore = ctx.baseRisk;" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "x1-kyc-check",
+      "description": "Call external KYC API",
+      "when": "payload.riskScore >= defaults.riskThreshold",
+      "externalCall": {
+        "method": "POST",
+        "url": "https://example-kyc.local/kyc/check",
+        "headers": {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer {{mvel: env['KYC_TOKEN']}}"
+        },
+        "bodyTemplate": "{ \"name\": \"{{mvel: payload.fullName}}\", \"email\": \"{{mvel: payload.email}}\", \"country\": \"{{mvel: ctx.country}}\" }",
+        "saveAs": "kycResult"
+      },
+      "transform": [
+        { "kind": "MVEL", "mvel": "payload.kyc = ctx.kycResult;" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "x2-i18n-message",
+      "description": "Fetch I18N translation and merge into payload",
+      "externalCall": {
+        "method": "GET",
+        "url": "https://mosaicuatwf.wns.com/XpertappR3/app/apservice/i18n/getlanguage?langcode=en",
+        "saveAs": "i18nResult"
+      },
+      "transform": [
+        { "kind": "MVEL", "mvel": "payload.messages = new java.util.HashMap();" },
+        { "kind": "MVEL", "mvel": "payload.messages.allocateApproversMessage = ctx.i18nResult.ALLOCATION.AllocatetheApprovers;" }
+      ],
+      "onSuccess": { "action": "CONTINUE" }
+    },
+    {
+      "id": "end-finalize",
+      "description": "Finalize payload",
+      "transform": [
+        { "kind": "MVEL", "mvel": "payload.processedAt = now.toString();" }
+      ],
+      "onSuccess": { "action": "STOP" }
+    }
+  ]
+}
