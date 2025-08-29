@@ -81,17 +81,6 @@ public class RuleEngine {
                         }
                     }
                     
-                    // Transform
-                    if (rule.getTransform() != null && !rule.getTransform().isEmpty()) {
-                        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
-                        for (TransformStep step : rule.getTransform()) {
-                            if ("SPEL".equalsIgnoreCase(step.getKind())) {
-                                spelEvaluator.evaluate(step.getSpel(), context);
-                            }
-                        }
-                        ruleTrace.put("status", "TRANSFORMED");
-                    }
-                    
                     // External call
                     if (rule.getExternalCall() != null) {
                         Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
@@ -99,6 +88,7 @@ public class RuleEngine {
                         String errorMessage = null;
                         try {
                             result = externalCallService.invoke(rule.getExternalCall(), context);
+                            logger.info("External call result for rule {}: {}", rule.getId(), result);
                         } catch (Exception e) {
                             logger.warn("External call failed for rule {}: {}", rule.getId(), e.getMessage());
                             result = null;
@@ -108,6 +98,7 @@ public class RuleEngine {
                         // Save result to context for internal use in transformations
                         if (rule.getExternalCall().getSaveAs() != null) {
                             ctx.put(rule.getExternalCall().getSaveAs(), result);
+                            logger.info("Saved external call result to context with key '{}': {}", rule.getExternalCall().getSaveAs(), result);
                         }
                         
                         // Record external call metadata (without the actual response data)
@@ -125,6 +116,17 @@ public class RuleEngine {
                         
                         ruleTrace.put("status", result != null ? "EXTERNAL_CALL" : "EXTERNAL_CALL_FAILED");
                         ruleTrace.put("externalCall", externalCall);
+                    }
+                    
+                    // Transform - use the same context that may contain external call results
+                    if (rule.getTransform() != null && !rule.getTransform().isEmpty()) {
+                        Map<String, Object> context = spelEvaluator.createContext(payload, ctx, defaults, env);
+                        for (TransformStep step : rule.getTransform()) {
+                            if ("SPEL".equalsIgnoreCase(step.getKind())) {
+                                spelEvaluator.evaluate(step.getSpel(), context);
+                            }
+                        }
+                        ruleTrace.put("status", "TRANSFORMED");
                     }
                     
                     // Check action

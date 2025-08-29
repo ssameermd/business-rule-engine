@@ -60,8 +60,10 @@ public class RestTemplateConfig {
             // Create hostname verifier that accepts all hostnames
             HostnameVerifier allHostsValid = (hostname, session) -> true;
             
-            // Build RestTemplate with SSL configuration
+            // Build RestTemplate with SSL configuration and timeouts
             return builder
+                .setConnectTimeout(java.time.Duration.ofSeconds(10))
+                .setReadTimeout(java.time.Duration.ofSeconds(30))
                 .requestFactory(() -> {
                     try {
                         HttpsURLConnection.setDefaultSSLSocketFactory(sslSocketFactory);
@@ -75,7 +77,10 @@ public class RestTemplateConfig {
                 
         } catch (NoSuchAlgorithmException | KeyManagementException e) {
             logger.warn("Could not configure SSL trust, using default RestTemplate", e);
-            return builder.build();
+            return builder
+                .setConnectTimeout(java.time.Duration.ofSeconds(10))
+                .setReadTimeout(java.time.Duration.ofSeconds(30))
+                .build();
         }
     }
 }

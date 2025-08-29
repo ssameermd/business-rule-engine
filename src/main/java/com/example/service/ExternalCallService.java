@@ -33,6 +33,7 @@ public class ExternalCallService {
             
             // Process URL template if it contains SpEL expressions
             url = spelEvaluator.processTemplate(url, context);
+            logger.info("Making external call: {} {}", method, url);
             
             if ("GET".equalsIgnoreCase(method)) {
                 return handleGet(url, call, context);
@@ -43,7 +44,7 @@ public class ExternalCallService {
                 return null;
             }
         } catch (Exception e) {
-            logger.error("Error making external call: {}", call.getUrl(), e);
+            logger.error("Error making external call to {}: {}", call.getUrl(), e.getMessage(), e);
             throw new RuntimeException("External call failed: " + e.getMessage(), e);
         }
     }
@@ -62,6 +63,7 @@ public class ExternalCallService {
         ResponseEntity<Map<String, Object>> response = restTemplate.exchange(url, HttpMethod.GET, request, (Class<Map<String, Object>>)(Class<?>)Map.class);
         
         logger.info("GET call to {} returned status: {}", url, response.getStatusCode());
+        logger.info("Response body: {}", response.getBody());
         return response.getBody();
     }
     

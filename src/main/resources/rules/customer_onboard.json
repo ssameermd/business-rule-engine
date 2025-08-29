@@ -66,7 +66,7 @@
       },
       "transform": [
         { "kind": "SPEL", "spel": "#payload['messages'] = new java.util.HashMap()" },
-        { "kind": "SPEL", "spel": "#payload['messages']['allocateApproversMessage'] = (#ctx['i18nResult'] != null ? #ctx['i18nResult']['ALLOCATION']['AllocatetheApprovers'] : 'Default Allocation Message')" }
+        { "kind": "SPEL", "spel": "#payload['messages']['allocateApproversMessage'] = (#ctx['i18nResult'] != null and #ctx['i18nResult']['ALLOCATION'] != null and #ctx['i18nResult']['ALLOCATION']['AllocatetheApprovers'] != null ? #ctx['i18nResult']['ALLOCATION']['AllocatetheApprovers'] : 'Default Allocation Message')" }
       ],
       "onSuccess": { "action": "CONTINUE" }
     },
